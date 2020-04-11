@@ -1,5 +1,4 @@
 import sys
-import os
 import importlib.util
 from pathlib import Path
 import pkgutil
@@ -54,22 +53,3 @@ def _init_python():
     if isinstance(imports, list):
         for name in imports:
             __import__(name)
-
-    # File paths to import
-    import_paths = python_config.get('import_paths', None)
-    if isinstance(import_paths, list):
-        for path in import_paths:
-            path = os.path.expandvars(os.path.expanduser(path))
-
-            if os.path.isfile(path):
-                name = os.path.splitext(os.path.basename(path))[0]
-                import_path(name, path)
-
-            elif os.path.dirname(path):
-                name = os.path.basename(path)
-                init_path = os.path.join(path, '__init__.py')
-                if os.path.isfile(init_path):
-                    package = import_path(name, init_path)
-                    import_all_in_package(package)
-                else:
-                    raise ImportError(f'Tried to import directory "{path}", but it had no "__init__.py".')
