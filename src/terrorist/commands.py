@@ -1,16 +1,16 @@
 from __future__ import annotations
+from collections import defaultdict
 from dataclasses import dataclass
 from inspect import Signature, Parameter, signature
 import time
-from typing import Type, NoReturn, Any, Optional, Callable, Iterable, Sized, Tuple, List, Dict
-
+from typing import Type, NoReturn, Any, Optional, Callable, Iterable, Sequence, Tuple, List, Dict, Mapping
 
 __all__ = ('Command', 'RunCommandException', 'register', 'get', 'get_all', 'run')
 
-
 CommandFunctionType = Callable[..., NoReturn]
 
-_registered: Dict[str, Command] = {}
+_registered_full_names: Dict[str, Command] = {}
+_registered_short_names: Dict[str, List[Command]] = defaultdict(list)
 
 
 @dataclass(frozen=True)
@@ -46,38 +46,51 @@ def register(namespace: Optional[str] = None,
                                    completion_output=completion_output)
         fullname: str = command.fullname()
 
-        if fullname in _registered:
+        if fullname in _registered_full_names:
             raise KeyError(f'Command "{fullname} is already registered.')
 
         for parameter in command.signature().parameters.values():
             if parameter.annotation == Parameter.empty:
                 raise TypeError(f'Command "{fullname}" parameter "{parameter.name}" must have a type annotation.')
 
-        _registered[fullname] = command
+        _registered_full_names[fullname] = command
+        _registered_short_names[command.name].append(command)
         return function
+
     return _inner
 
 
 def get_all() -> Iterable[Command]:
-    return _registered.values()
+    return _registered_full_names.values()
 
 
-def get(name: str) -> Optional[Command]:
-    return _registered.get(name, None)
+def get(name: str) -> List[Command]:
+    from . import config
+
+    if name in _registered_full_names:
+        return [_registered_full_names[name]]
+
+    if config.get('terrorist', {}).get('short_name_resolution', False):
+        return _registered_short_names[name]
+
+    return []
 
 
-def run(name: str, raw_args: Optional[Sized[str]] = None):
-    command: Optional[Command] = get(name)
+def run(name: str, raw_args: Optional[Sequence[str]] = None):
+    commands: List[Command] = get(name)
 
-    if command is None:
+    if len(commands) == 0:
         raise RunCommandException(f'No command {name}')
+    elif len(commands) > 1:
+        raise RunCommandException(f'')
 
+    command: Command = commands[0]
     args, kwargs = _process_args(command, raw_args or [])
 
     start_time = time.perf_counter()
     exception: Optional[Exception] = None
     try:
-        _registered[name].function(*args, **kwargs)
+        command.function(*args, **kwargs)
     except Exception as e:
         exception = e
         raise e
@@ -87,10 +100,10 @@ def run(name: str, raw_args: Optional[Sized[str]] = None):
             print(f'{"Succeeded" if exception is None else "Failed"}: {(end_time - start_time):.03f}s')
 
 
-def _process_args(command: Command, raw_args: Sized[str]) -> Tuple[List[Any], Dict[str, Any]]:
+def _process_args(command: Command, raw_args: Sequence[str]) -> Tuple[List[Any], Dict[str, Any]]:
     from .types import get_parameter_expected_type
 
-    parameters: Dict[str, Parameter] = command.signature().parameters
+    parameters: Mapping[str, Parameter] = command.signature().parameters
     parameter_list: List[Parameter] = list(parameters.values())
 
     # Find number of required arguments (the last function parameter that does not have a default.)
@@ -142,7 +155,7 @@ def _process_args(command: Command, raw_args: Sized[str]) -> Tuple[List[Any], Di
 
         raw_arg_index += 1
 
-    if not (num_required_args <= len(args)  <= num_allowed_args):
+    if not (num_required_args <= len(args) <= num_allowed_args):
         num_str = (f'{num_required_args} to {num_allowed_args}'
                    if num_required_args != num_allowed_args
                    else str(num_required_args))
