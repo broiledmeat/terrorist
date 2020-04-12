@@ -1,4 +1,5 @@
 import sys
+import os
 import importlib.util
 from pathlib import Path
 import pkgutil
@@ -46,6 +47,7 @@ def _init_python():
     paths = python_config.get('paths', None)
     if isinstance(paths, list):
         for path in paths:
+            path = os.path.expanduser(os.path.expandvars(path))
             sys.path.append(path)
 
     # Python module import names
