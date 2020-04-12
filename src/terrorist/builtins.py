@@ -16,7 +16,7 @@ def list_commands(namespace: Optional[str] = None):
     command_list: List[Tuple[str, str]] = []
 
     for command in get_all():
-        fullname = command.fullname()
+        fullname: str = command.fullname()
 
         if filter_name is not None and not fullname.lower().startswith(filter_name):
             continue
@@ -45,20 +45,22 @@ def list_commands(namespace: Optional[str] = None):
 
 
 def command_usage(name: str):
-    from .commands import Command, get
+    from .commands import Command, RunCommandException, get
     from .types import get_type_display_name, get_parameter_expected_type
 
-    command: Optional[Command] = get(name)
+    commands: List[Command] = get(name)
 
-    if command is None:
-        print(f'No command "{name}".')
-        return
+    if len(commands) == 0:
+        raise RunCommandException(f'No command {name}')
+    elif len(commands) > 1:
+        raise RunCommandException(f'Found conflicting commands: {", ".join(c.fullname() for c in commands)}')
 
-    usage = command.fullname()
+    command: Command = commands[0]
+    usage: str = command.fullname()
     parameters: Iterable[Parameter] = command.signature().parameters.values()
 
     for parameter in parameters:
-        type_name = get_type_display_name(get_parameter_expected_type(parameter))
+        type_name: str = get_type_display_name(get_parameter_expected_type(parameter))
 
         if parameter.kind == Parameter.KEYWORD_ONLY:
             usage += f' [--{parameter.name}'
