@@ -115,6 +115,10 @@ def _process_args(command: Command, raw_args: Sequence[str]) -> Tuple[List[Any],
         if parameter.kind != Parameter.KEYWORD_ONLY:
             num_allowed_args = i + 1
 
+    num_str: str = (f'{num_required_args} to {num_allowed_args}'
+                    if num_required_args != num_allowed_args
+                    else str(num_required_args))
+
     # Separate out arguments and flags.
     args: List[str] = []
     kwargs: Dict[str, Any] = {}
@@ -147,6 +151,10 @@ def _process_args(command: Command, raw_args: Sequence[str]) -> Tuple[List[Any],
 
                 kwargs[key] = _coerce_value(raw_args[raw_arg_index], type_)
         else:
+            if arg_index >= len(parameter_list):
+                raise RunCommandException(f'Unexpected argument "{raw_arg}". Command "{command.fullname()}" takes '
+                                          f'{num_str} argument(s).')
+
             # This is a regular arg. Coerce it to the the expected parameter type.
             type_: Type = get_parameter_expected_type(parameter_list[arg_index])
 
@@ -156,11 +164,8 @@ def _process_args(command: Command, raw_args: Sequence[str]) -> Tuple[List[Any],
         raw_arg_index += 1
 
     if not (num_required_args <= len(args) <= num_allowed_args):
-        num_str = (f'{num_required_args} to {num_allowed_args}'
-                   if num_required_args != num_allowed_args
-                   else str(num_required_args))
-        raise RunCommandException(f'Incorrect number of arguments for command "{command.fullname()}", '
-                                  f'expected {num_str}')
+        raise RunCommandException(f'Unexpected number of arguments. Command "{command.fullname()}", takes {num_str} '
+                                  f'argument(s).')
 
     return args, kwargs
 
